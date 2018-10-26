@@ -5,21 +5,29 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/globalsign/mgo"
+	"github.com/globalsign/mgo/bson"
 	"github.com/gorilla/mux"
 	"github.com/marni/goigc"
 )
 
 const (
 	//VERSION of program
-	VERSION = "1.0"
+	VERSION = "v1"
 	//DESC is a description of the program
-	DESC = "Service for IGC tracks."
+	DESC = "Service for Paragliding tracks."
 )
+
+// TrackMongoDB stores the DB connection
+type TrackMongoDB struct {
+	HostURL             string
+	Databasename        string
+	TrackCollectionName string
+}
 
 //MetaInfo about the program
 type MetaInfo struct {
@@ -30,16 +38,18 @@ type MetaInfo struct {
 
 //Track is glider track info
 type Track struct {
-	ID          int       `json:"ID"`
-	Hdate       time.Time `json:"H_Date"`
-	Pilot       string    `json:"pilot"`
-	Glider      string    `json:"glider"`
-	GliderID    string    `json:"glider_id"`
-	Tracklength float64   `json:"calculated total track length"`
+	TrackID     int       `json:"TrackID" bson:"TrackID"`
+	Hdate       time.Time `json:"H_Date" bson:"H_Date"`
+	Pilot       string    `json:"pilot" bson:"pilot"`
+	Glider      string    `json:"glider" bson:"glider"`
+	GliderID    string    `json:"glider_id" bson:"glider_id"`
+	Tracklength float64   `json:"calculated total track length" bson:"calculated total track length"`
+	TrackURL    string    `json:"url" bson:"url"`
 }
 
 var startTime time.Time
 var tracks map[int]Track
+var db TrackMongoDB
 
 //ID counter
 var ID int
@@ -48,6 +58,37 @@ func init() {
 	startTime = time.Now()
 	tracks = make(map[int]Track)
 	ID = 1
+	db = TrackMongoDB{
+		"mongodb://user:test1234@ds143293.mlab.com:43293/igctracker",
+		"igctracker",
+		"Tracks",
+	}
+	//Makes sure that we can connect to database
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+	count, err := session.DB(db.Databasename).C(db.TrackCollectionName).Count()
+	if err != nil {
+		panic(err)
+	}
+	if count != 0 {
+		trackss := []Track{}
+		ids := []int{}
+		err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{}).Sort("TrackID").All(&trackss)
+		if err != nil {
+			panic(err)
+		}
+		for _, track := range trackss {
+			ids = append(ids, track.TrackID)
+		}
+		if ids[len(ids)-1] != 0 {
+			ID = ids[len(ids)-1] + 1
+		}
+	}
+
+	//TODO put extra constraints on Track collection
 }
 
 //Uptime calculates uptime of program
@@ -98,7 +139,7 @@ func handlerGetTrack(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	//Check if track ID exists
-	if tracks[id].ID == 0 {
+	if tracks[id].TrackID == 0 {
 		http.Error(w, "404 Not found", http.StatusNotFound)
 		return
 	}
@@ -144,17 +185,25 @@ func handlerGetField(w http.ResponseWriter, r *http.Request) {
 //Displays Ids or adds Track to memory
 func handlerIGC(w http.ResponseWriter, r *http.Request) {
 
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
 	//Check if request is GET or POST
 	switch r.Method {
 	//Displays Ids
 	case ("GET"):
 		//Slice of Ids
+		trackss := []Track{}
 		ids := []int{}
-		//Add id of track to slice
-		for index := range tracks {
-			ids = append(ids, tracks[index].ID)
+
+		err := session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{}).All(&trackss)
+		if err != nil {
+			panic(err)
 		}
-		sort.Ints(ids)
+		for _, track := range trackss {
+			ids = append(ids, track.TrackID)
+		}
 		IDJSON, err := json.Marshal(ids)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
@@ -179,10 +228,15 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			panic(err)
 		}
-		//Fills in values in track
-		tracks[ID] = Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track)}
+		//Fills the struct with data
+		t := Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track), data["url"]}
+		//Insert track into database
+		err = session.DB(db.Databasename).C(db.TrackCollectionName).Insert(t)
+		if err != nil {
+			fmt.Printf("Error in insert(): %v", err.Error())
+		}
 
-		infoJSON, err := json.Marshal(tracks[ID].ID)
+		infoJSON, err := json.Marshal(t.TrackID)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
@@ -197,6 +251,9 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		//If request is not GET or POST error 405
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+
+	defer session.Close()
+
 }
 
 //CalculateDistance calculates the track distance
@@ -224,6 +281,7 @@ func GetPort() string {
 }
 
 func main() {
+
 	router := mux.NewRouter()
 	router.HandleFunc("/igcinfo/api/", handlerAPI)
 	router.HandleFunc("/igcinfo/api/igc/", handlerIGC)
