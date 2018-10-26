@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -72,7 +73,7 @@ func handlerAPI(w http.ResponseWriter, r *http.Request) {
 	//Set headertype, status and write the metadata
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(infoJSON, ErrBodyNotAllowed)
+	w.Write(infoJSON)
 
 }
 
@@ -153,6 +154,7 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		for index := range tracks {
 			ids = append(ids, tracks[index].ID)
 		}
+		sort.Ints(ids)
 		IDJSON, err := json.Marshal(ids)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
@@ -165,14 +167,18 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 	//Creates a track
 	case ("POST"):
 		//URL string
-		var url string
-		err := json.NewDecoder(r.Body).Decode(&url)
+		var data map[string]string
+		err := json.NewDecoder(r.Body).Decode(&data)
 		if err != nil {
 			http.Error(w, err.Error(), 400)
 			return
 		}
+		defer r.Body.Close()
 		//Parses IGC file from URL
-		track, err := igc.ParseLocation(url)
+		track, err := igc.ParseLocation(data["url"])
+		if err != nil {
+			panic(err)
+		}
 		//Fills in values in track
 		tracks[ID] = Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track)}
 
