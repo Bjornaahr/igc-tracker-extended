@@ -38,17 +38,29 @@ type MetaInfo struct {
 
 //Track is glider track info
 type Track struct {
-	TrackID     int       `json:"TrackID" bson:"TrackID"`
-	Hdate       time.Time `json:"H_Date" bson:"H_Date"`
-	Pilot       string    `json:"pilot" bson:"pilot"`
-	Glider      string    `json:"glider" bson:"glider"`
-	GliderID    string    `json:"glider_id" bson:"glider_id"`
-	Tracklength float64   `json:"calculated total track length" bson:"calculated total track length"`
-	TrackURL    string    `json:"url" bson:"url"`
+	TrackID     int           `json:"TrackID" bson:"TrackID"`
+	Hdate       time.Time     `json:"H_Date" bson:"H_Date"`
+	Pilot       string        `json:"pilot" bson:"pilot"`
+	Glider      string        `json:"glider" bson:"glider"`
+	GliderID    string        `json:"glider_id" bson:"glider_id"`
+	Tracklength float64       `json:"calculated total track length" bson:"calculated total track length"`
+	TrackURL    string        `json:"url" bson:"url"`
+	TimeStamp   bson.ObjectId `bson:"timestamp"`
+}
+
+type Ticker struct {
+	Tlatest      bson.ObjectId `json:"t_latest"`
+	Tstart       bson.ObjectId `json:"t_start"`
+	Tstop        bson.ObjectId `json:"t_stop"`
+	TracksIds    []int         `json:"tracks"`
+	Responsetime time.Duration `json:"responsetime"`
+}
+
+type temp struct {
+	Timestamp bson.ObjectId
 }
 
 var startTime time.Time
-var tracks map[int]Track
 var db TrackMongoDB
 
 //ID counter
@@ -56,7 +68,6 @@ var ID int
 
 func init() {
 	startTime = time.Now()
-	tracks = make(map[int]Track)
 	ID = 1
 	db = TrackMongoDB{
 		"mongodb://user:test1234@ds143293.mlab.com:43293/igctracker",
@@ -125,6 +136,13 @@ func handlerGetTrack(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+
 	//Gets and parses the ID from URL
 	vars := mux.Vars(r)
 	varID := vars["id"]
@@ -134,12 +152,18 @@ func handlerGetTrack(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	TrackJSON, err := json.Marshal(tracks[id])
+	var track Track
+	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{"TrackID": id}).One(&track)
+	if err != nil {
+		panic(err)
+	}
+
+	TrackJSON, err := json.Marshal(track)
 	if err != nil {
 		panic(err)
 	}
 	//Check if track ID exists
-	if tracks[id].TrackID == 0 {
+	if track.TrackID == 0 {
 		http.Error(w, "404 Not found", http.StatusNotFound)
 		return
 	}
@@ -160,13 +184,25 @@ func handlerGetField(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+
+	var track Track
+	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{"TrackID": id}).One(&track)
+	if err != nil {
+		panic(err)
+	}
+
 	//Map to search for fields
 	trackMap := map[string]string{
-		"pilot":        tracks[id].Pilot,
-		"glider":       tracks[id].Glider,
-		"glider_id":    tracks[id].GliderID,
-		"track_length": fmt.Sprintf("%f", tracks[id].Tracklength),
-		"h_date":       tracks[id].Hdate.String(),
+		"pilot":        track.Pilot,
+		"glider":       track.Glider,
+		"glider_id":    track.GliderID,
+		"track_length": fmt.Sprintf("%f", track.Tracklength),
+		"h_date":       track.Hdate.String(),
 	}
 	//Makes the fields to lowercase
 	field := strings.ToLower(vars["field"])
@@ -182,13 +218,15 @@ func handlerGetField(w http.ResponseWriter, r *http.Request) {
 
 }
 
-//Displays Ids or adds Track to memory
+//Displays Ids or adds Track to database
 func handlerIGC(w http.ResponseWriter, r *http.Request) {
 
 	session, err := mgo.Dial(db.HostURL)
 	if err != nil {
 		panic(err)
 	}
+	defer session.Close()
+
 	//Check if request is GET or POST
 	switch r.Method {
 	//Displays Ids
@@ -229,7 +267,7 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		//Fills the struct with data
-		t := Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track), data["url"]}
+		t := Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track), data["url"], bson.NewObjectIdWithTime(time.Now())}
 		//Insert track into database
 		err = session.DB(db.Databasename).C(db.TrackCollectionName).Insert(t)
 		if err != nil {
@@ -252,7 +290,130 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 
+}
+
+func handlerLastTicker(w http.ResponseWriter, r *http.Request) {
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
 	defer session.Close()
+	var track Track
+	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{"TrackID": (ID - 1)}).One(&track)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Fprintf(w, track.TimeStamp.String())
+
+}
+
+func handlerTicker(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+	tracksperpage := 5
+	pageStart := 0
+	pageEnd := pageStart + tracksperpage
+	tracks := []Track{}
+	ids := []int{}
+	//Gets all the tracks from database
+	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{}).All(&tracks)
+	if err != nil {
+		panic(err)
+	}
+
+	if len(tracks) < tracksperpage {
+		pageEnd = (len(tracks) - 1) % tracksperpage
+	}
+
+	t_start := tracks[pageStart].TimeStamp
+	t_stop := tracks[pageEnd].TimeStamp
+	t_latest := tracks[ID-2].TimeStamp
+	for i := pageStart; i <= pageEnd; i++ {
+		ids = append(ids, tracks[i].TrackID)
+	}
+
+	responsetime := time.Since(start)
+
+	ticker := Ticker{t_latest,
+		t_start,
+		t_stop,
+		ids,
+		responsetime}
+
+	TICKERJSON, err := json.Marshal(ticker)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(TICKERJSON)
+
+}
+
+func handlerTickerTimestamp(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
+	defer session.Close()
+	vars := mux.Vars(r)
+	timestampstring := vars["timestamp"]
+
+	tracksperpage := 5
+
+	tracks := []Track{}
+	ids := []int{}
+	timestamp := temp{}
+
+	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{"timestamp": bson.ObjectIdHex(timestampstring)}).One(&timestamp)
+	if err != nil {
+		panic(err)
+	}
+	//Gets all the tracks from database
+	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{}).All(&tracks)
+	if err != nil {
+		panic(err)
+	}
+
+	pageStart := 0
+	pageEnd := len(tracks) - 1
+
+	if len(tracks) < tracksperpage {
+		pageEnd = (len(tracks) - 1) % tracksperpage
+	}
+
+	t_start := tracks[pageStart].TimeStamp
+	t_stop := tracks[pageEnd].TimeStamp
+	t_latest := tracks[ID-2].TimeStamp
+	for i := 0; i < tracksperpage; i++ {
+		if timestamp.Timestamp < tracks[i].TimeStamp {
+			ids = append(ids, tracks[i].TrackID)
+		}
+	}
+
+	responsetime := time.Since(start)
+
+	ticker := Ticker{t_latest,
+		t_start,
+		t_stop,
+		ids,
+		responsetime}
+
+	TICKERJSON, err := json.Marshal(ticker)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(TICKERJSON)
 
 }
 
@@ -287,5 +448,8 @@ func main() {
 	router.HandleFunc("/igcinfo/api/igc/", handlerIGC)
 	router.HandleFunc("/igcinfo/api/igc/{id:[0-9]+}/", handlerGetTrack)
 	router.HandleFunc("/igcinfo/api/igc/{id:[0-9]+}/{field:[a-zA-Z_]+}/", handlerGetField)
+	router.HandleFunc("/igcinfo/api/ticker/", handlerTicker)
+	router.HandleFunc("/igcinfo/api/ticker/latest/", handlerLastTicker)
+	router.HandleFunc("/igcinfo/api/ticker/{timestamp:[a-zA-Z0-9_]+}/", handlerTickerTimestamp)
 	http.ListenAndServe(GetPort(), router)
 }

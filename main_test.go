@@ -2,10 +2,11 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/globalsign/mgo"
 	"github.com/gorilla/mux"
@@ -13,8 +14,8 @@ import (
 
 func setupDB(t *testing.T) *TrackMongoDB {
 	db := TrackMongoDB{
-		"localhost",
-		"testTracksDB",
+		"mongodb://user:test1234@ds217092.mlab.com:17092/testtracksdb",
+		"testtracksdb",
 		"Tracks",
 	}
 	_, err := mgo.Dial(db.HostURL)
@@ -51,16 +52,21 @@ func TestHandlerIGC(t *testing.T) {
 	db := setupDB(t)
 
 	payload := []byte(`{"url": "http://skypolaris.org/wp-content/uploads/IGS%20Files/Madrid%20to%20Jerez.igc"}`)
-	req, _ := http.NewRequest("POST", "localhost:5000/igcinfo/api/igc/", bytes.NewBuffer(payload))
-	response := executeRequest(req)
+	req, _ := http.NewRequest("POST", "/api", bytes.NewBuffer(payload))
+	w := httptest.NewRecorder()
+	router := mux.NewRouter()
 
-	checkResponseCode(t, http.StatusCreated, response.Code)
-	var m string
-	json.Unmarshal(response.Body.Bytes(), &m)
+	router.ServeHTTP(w, req)
 
-	if m != "1" {
-		t.Errorf("Expected id to be '1'. Got '%v'", m)
-	}
 	defer tearDownDB(t, db)
+
+}
+
+func TestHandlerAPI(t *testing.T) {
+
+	//req := httptest.NewRequest("GET", "igcinfo/api/", nil)
+	res := httptest.NewRecorder()
+
+	assert.Equal(t, http.StatusOK, res.Code)
 
 }
