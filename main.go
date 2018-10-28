@@ -60,6 +60,13 @@ type temp struct {
 	Timestamp bson.ObjectId
 }
 
+type WebHook struct {
+	WebhookID       int
+	URL             string
+	MinTriggerValue int
+	ActualValue     int
+}
+
 var startTime time.Time
 var db TrackMongoDB
 
@@ -69,6 +76,7 @@ var ID int
 func init() {
 	startTime = time.Now()
 	ID = 1
+	HookID = 1
 	db = TrackMongoDB{
 		"mongodb://user:test1234@ds143293.mlab.com:43293/igctracker",
 		"igctracker",
@@ -100,6 +108,8 @@ func init() {
 	}
 
 	//TODO put extra constraints on Track collection
+
+	WebHookInit()
 }
 
 //Uptime calculates uptime of program
@@ -174,7 +184,10 @@ func handlerGetTrack(w http.ResponseWriter, r *http.Request) {
 
 //Display a field from a track
 func handlerGetField(w http.ResponseWriter, r *http.Request) {
-
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	//Gets and parses the ID from URL
 	vars := mux.Vars(r)
 	varID := vars["id"]
@@ -284,6 +297,7 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		w.Write(infoJSON)
 		//Adds one to ID so every track that is created is uniqe
 		ID++
+		UpdateWebHooks()
 
 	default:
 		//If request is not GET or POST error 405
@@ -442,14 +456,17 @@ func GetPort() string {
 }
 
 func main() {
-
+	webhookmain()
 	router := mux.NewRouter()
-	router.HandleFunc("/igcinfo/api/", handlerAPI)
-	router.HandleFunc("/igcinfo/api/igc/", handlerIGC)
-	router.HandleFunc("/igcinfo/api/igc/{id:[0-9]+}/", handlerGetTrack)
-	router.HandleFunc("/igcinfo/api/igc/{id:[0-9]+}/{field:[a-zA-Z_]+}/", handlerGetField)
-	router.HandleFunc("/igcinfo/api/ticker/", handlerTicker)
-	router.HandleFunc("/igcinfo/api/ticker/latest/", handlerLastTicker)
-	router.HandleFunc("/igcinfo/api/ticker/{timestamp:[a-zA-Z0-9_]+}/", handlerTickerTimestamp)
+	router.HandleFunc("/paraglider/api/", handlerAPI)
+	router.HandleFunc("/paraglider/api/igc/", handlerIGC)
+	router.HandleFunc("/paraglider/api/igc/{id:[0-9]+}/", handlerGetTrack)
+	router.HandleFunc("/paraglider/api/igc/{id:[0-9]+}/{field:[a-zA-Z_]+}/", handlerGetField)
+	router.HandleFunc("/paraglider/api/ticker/", handlerTicker)
+	router.HandleFunc("/paraglider/api/ticker/latest/", handlerLastTicker)
+	router.HandleFunc("/paraglider/api/ticker/{timestamp:[a-zA-Z0-9_]+}/", handlerTickerTimestamp)
+	router.HandleFunc("/paraglider/api/webhook/new_track/", handlerNewWebHook)
+	router.HandleFunc("/paraglider/api/webhook/new_track/{webhook:[a-zA-Z0-9_]+}/", handlerGetWebHook).Methods("GET")
+	router.HandleFunc("/paraglider/api/webhook/new_track/{webhook:[a-zA-Z0-9_]+}/", handlerDeleteWebHook).Methods("DELETE")
 	http.ListenAndServe(GetPort(), router)
 }
