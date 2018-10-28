@@ -468,5 +468,7 @@ func main() {
 	router.HandleFunc("/paraglider/api/webhook/new_track/", handlerNewWebHook)
 	router.HandleFunc("/paraglider/api/webhook/new_track/{webhook:[a-zA-Z0-9_]+}/", handlerGetWebHook).Methods("GET")
 	router.HandleFunc("/paraglider/api/webhook/new_track/{webhook:[a-zA-Z0-9_]+}/", handlerDeleteWebHook).Methods("DELETE")
+	router.HandleFunc("/paraglider/admin/api/tracks_count/", handlerAdminCount).Methods("GET")
+	router.HandleFunc("/paraglider/admin/api/tracks/", handlerAdminDeleteTrack).Methods("DELETE")
 	http.ListenAndServe(GetPort(), router)
 }
