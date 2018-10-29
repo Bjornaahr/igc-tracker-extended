@@ -117,7 +117,15 @@ func handlerGetWebHook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
+	count, err := session.DB(dbh.Databasename).C(dbh.TrackCollectionName).Count()
+	if err != nil {
+		panic(err)
+	}
 
+	if id > count {
+		http.Error(w, "Invalid ID", http.StatusNotFound)
+		return
+	}
 	webhook := WebHook{}
 	//Gets webhook from db and puts data in webhook
 	err = session.DB(dbh.Databasename).C(dbh.TrackCollectionName).Find(bson.M{"webhookid": id}).One(&webhook)
