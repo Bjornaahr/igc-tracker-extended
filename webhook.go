@@ -81,7 +81,7 @@ func handlerNewWebHook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 400)
 		return
 	}
-
+	//Creates and insert webhook to db
 	web := WebHook{HookID, data["webhookURL"], triggerValue, 0}
 	err = session.DB(dbh.Databasename).C(dbh.TrackCollectionName).Insert(&web)
 	if err != nil {
@@ -103,6 +103,7 @@ func handlerNewWebHook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+//Gets specified webhook
 func handlerGetWebHook(w http.ResponseWriter, r *http.Request) {
 	session, err := mgo.Dial(dbh.HostURL)
 	if err != nil {
@@ -118,12 +119,12 @@ func handlerGetWebHook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	webhook := WebHook{}
-
+	//Gets webhook from db and puts data in webhook
 	err = session.DB(dbh.Databasename).C(dbh.TrackCollectionName).Find(bson.M{"webhookid": id}).One(&webhook)
 	if err != nil {
 		panic(err)
 	}
-
+	//Maps the data we want to display
 	webhookmap := map[string]string{
 		"webhookURL":      webhook.URL,
 		"minTriggerValue": strconv.Itoa(webhook.MinTriggerValue),
@@ -143,6 +144,7 @@ func handlerGetWebHook(w http.ResponseWriter, r *http.Request) {
 
 }
 
+//Deletes specified webhook
 func handlerDeleteWebHook(w http.ResponseWriter, r *http.Request) {
 	session, err := mgo.Dial(dbh.HostURL)
 	if err != nil {
@@ -159,13 +161,14 @@ func handlerDeleteWebHook(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	handlerGetWebHook(w, r)
-
+	//Deletes webhook from db
 	err = session.DB(dbh.Databasename).C(dbh.TrackCollectionName).Remove(bson.M{"webhookid": id})
 	if err != nil {
 		panic(err)
 	}
 }
 
+//sendMessage sends message to webhook to dispaly
 func sendMessage(token string, amountadded int, start time.Time) {
 	session, err := mgo.Dial(dbh.HostURL)
 	if err != nil {
@@ -174,15 +177,16 @@ func sendMessage(token string, amountadded int, start time.Time) {
 
 	trackss := []Track{}
 	ids := []string{}
+	//Gets all tracks from db
 	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{}).Sort("TrackID").All(&trackss)
 	if err != nil {
 		panic(err)
 	}
-
+	//Gets the ids added since the last time
 	for i := len(trackss) - 1; i >= len(trackss)-amountadded; i-- {
 		ids = append(ids, strconv.Itoa(trackss[i].TrackID))
 	}
-
+	//Creates message to send
 	message := map[string]interface{}{
 		"content": fmt.Sprintf("Latest timestamp: %s, Newest %d added are %s [Processing time %s]",
 			trackss[len(trackss)-1].TimeStamp,
@@ -195,7 +199,7 @@ func sendMessage(token string, amountadded int, start time.Time) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-
+	//Sends message to webhook
 	_, err = http.Post(token, "application/json", bytes.NewBuffer(bytesRepresentation))
 	if err != nil {
 		println(err.Error())
@@ -210,7 +214,7 @@ func UpdateWebHooks() {
 		panic(err)
 	}
 	defer session.Close()
-
+	//Increses the value of actualvalue in the db
 	_, err = session.DB(dbh.Databasename).C(dbh.TrackCollectionName).UpdateAll(bson.M{}, bson.M{"$inc": bson.M{"actualvalue": 1}})
 	if err != nil {
 		panic(err)
@@ -218,6 +222,7 @@ func UpdateWebHooks() {
 	webhookmain()
 }
 
+//webhookmain check if it is time to send the message
 func webhookmain() {
 	start := time.Now()
 	session, err := mgo.Dial(dbh.HostURL)
@@ -227,14 +232,16 @@ func webhookmain() {
 	defer session.Close()
 
 	webhooks := []WebHook{}
+	//Gets all the webhooks
 	err = session.DB(dbh.Databasename).C(dbh.TrackCollectionName).Find(bson.M{}).All(&webhooks)
 	if err != nil {
 		panic(err)
 	}
-
+	//Loops through all webhooks and send message if actualvalue > mintrigger
 	for _, hook := range webhooks {
 		if hook.ActualValue >= hook.MinTriggerValue {
 			sendMessage(hook.URL, hook.ActualValue, start)
+			//Sets actual value to 0
 			_, err = session.DB(dbh.Databasename).C(dbh.TrackCollectionName).UpdateAll(bson.M{}, bson.M{"$set": bson.M{"actualvalue": 0}})
 			if err != nil {
 				panic(err)

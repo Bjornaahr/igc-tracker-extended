@@ -373,7 +373,7 @@ func handlerTicker(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-
+	//Finds the end of the page if there is less than 5 tracks
 	if len(tracks) < tracksperpage {
 		pageEnd = (len(tracks) - 1) % tracksperpage
 	}
@@ -381,6 +381,7 @@ func handlerTicker(w http.ResponseWriter, r *http.Request) {
 	tstart := tracks[pageStart].TimeStamp
 	tstop := tracks[pageEnd].TimeStamp
 	tlatest := tracks[ID-2].TimeStamp
+	//Appends Ids slice with max tracksperpage
 	for i := pageStart; i <= pageEnd; i++ {
 		ids = append(ids, tracks[i].TrackID)
 	}
@@ -422,7 +423,7 @@ func handlerTickerTimestamp(w http.ResponseWriter, r *http.Request) {
 	tracks := []Track{}
 	ids := []int{}
 	timestamp := temp{}
-
+	//Gets the specified timestamp
 	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{"timestamp": bson.ObjectIdHex(timestampstring)}).One(&timestamp)
 	if err != nil {
 		panic(err)
@@ -436,6 +437,7 @@ func handlerTickerTimestamp(w http.ResponseWriter, r *http.Request) {
 	pageStart := 0
 	pageEnd := len(tracks) - 1
 
+	//Finds the end of the page if there is less than 5 tracks
 	if len(tracks) < tracksperpage {
 		pageEnd = (len(tracks) - 1) % tracksperpage
 	}
@@ -443,6 +445,7 @@ func handlerTickerTimestamp(w http.ResponseWriter, r *http.Request) {
 	tstart := tracks[pageStart].TimeStamp
 	tstop := tracks[pageEnd].TimeStamp
 	tlatest := tracks[ID-2].TimeStamp
+	//Appends Ids slice with max tracksperpage
 	for i := 0; i < tracksperpage; i++ {
 		if timestamp.Timestamp < tracks[i].TimeStamp {
 			ids = append(ids, tracks[i].TrackID)
