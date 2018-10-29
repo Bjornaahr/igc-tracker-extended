@@ -337,6 +337,7 @@ func postFunction(w http.ResponseWriter, r *http.Request) {
 
 }
 
+//Gets the latest ticer added
 func handlerLastTicker(w http.ResponseWriter, r *http.Request) {
 	session, err := mgo.Dial(db.HostURL)
 	if err != nil {
