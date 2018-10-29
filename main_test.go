@@ -7,10 +7,9 @@ import (
 	"testing"
 
 	"github.com/marni/goigc"
-
-	"github.com/globalsign/mgo"
 )
 
+/*
 //Connects to the test database
 func setupDB(t *testing.T) *TrackMongoDB {
 	db := TrackMongoDB{
@@ -35,7 +34,7 @@ func tearDownDB(t *testing.T, db *TrackMongoDB) {
 	if err != nil {
 		t.Error(err)
 	}
-}
+}*/
 
 //Test if you get a 400 error when posting without payload
 func TestHandlerIGCNoPayload(t *testing.T) {
@@ -138,5 +137,78 @@ func TestHandlerAPI(t *testing.T) {
 	// Check the status code
 	if resp.Code != http.StatusOK { // It should be 200 (OK)
 		t.Errorf("Handler returned wrong status got %v want %v", resp.Code, http.StatusOK)
+	}
+}
+
+//Check if correct error if using a nan when getting track
+func TestHandlerGetIDNan(t *testing.T) {
+	req, err := http.NewRequest("GET", "/paragliding/api/igc/abs/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Create a ResponseRecorder to record the response
+	resp := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlerGetTrack)
+
+	handler.ServeHTTP(resp, req)
+
+	// Check the status code
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("Handler returned wrong status got %v want %v", resp.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandlerGetFieldNan(t *testing.T) {
+	req, err := http.NewRequest("GET", "/paragliding/api/igc/abs/pilot/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Create a ResponseRecorder to record the response
+	resp := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlerGetField)
+
+	handler.ServeHTTP(resp, req)
+
+	// Check the status code
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("Handler returned wrong status got %v want %v", resp.Code, http.StatusBadRequest)
+	}
+}
+
+func TestHandlerGetFieldNotValidFeild(t *testing.T) {
+	req, err := http.NewRequest("GET", "/paragliding/api/igc/1/Mybrainhurts!/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Create a ResponseRecorder to record the response
+	resp := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlerGetField)
+
+	handler.ServeHTTP(resp, req)
+
+	// Check the status code
+	if resp.Code != http.StatusBadRequest {
+		t.Errorf("Handler returned wrong status got %v want %v", resp.Code, http.StatusBadRequest)
+	}
+}
+
+func TestRedirectCorrect(t *testing.T) {
+	req, err := http.NewRequest("GET", "/paragliding/", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Create a ResponseRecorder to record the response
+	resp := httptest.NewRecorder()
+	handler := http.HandlerFunc(handlerRedirect)
+
+	handler.ServeHTTP(resp, req)
+
+	// Check the status code
+	if resp.Code != http.StatusSeeOther {
+		t.Errorf("Handler returned wrong status got %v want %v", resp.Code, http.StatusSeeOther)
 	}
 }

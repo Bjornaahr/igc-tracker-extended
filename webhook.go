@@ -14,9 +14,11 @@ import (
 	"github.com/gorilla/mux"
 )
 
+//HookID global variable for id of the webhook
 var HookID int
 var dbh TrackMongoDB
 
+//WebHookInit connects to a database and set's correct id
 func WebHookInit() {
 	dbh = TrackMongoDB{
 		"mongodb://user:test1234@ds143293.mlab.com:43293/igctracker",
@@ -26,6 +28,7 @@ func WebHookInit() {
 	WebHookSetID()
 }
 
+//WebHookSetID returns the correct id from the database
 func WebHookSetID() {
 	session, err := mgo.Dial(dbh.HostURL)
 	if err != nil {
@@ -94,7 +97,10 @@ func handlerNewWebHook(w http.ResponseWriter, r *http.Request) {
 	WebHookSetID()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(infoJSON)
+	_, err = w.Write(infoJSON)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func handlerGetWebHook(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +136,10 @@ func handlerGetWebHook(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(WEBJSON)
+	_, err = w.Write(WEBJSON)
+	if err != nil {
+		panic(err)
+	}
 
 }
 
@@ -194,6 +203,7 @@ func sendMessage(token string, amountadded int, start time.Time) {
 
 }
 
+//UpdateWebHooks increases the actual value in all webhooks
 func UpdateWebHooks() {
 	session, err := mgo.Dial(dbh.HostURL)
 	if err != nil {

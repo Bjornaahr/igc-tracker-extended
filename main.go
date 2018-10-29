@@ -48,6 +48,7 @@ type Track struct {
 	TimeStamp   bson.ObjectId `bson:"timestamp"`
 }
 
+//Ticker keeps info about the ticker response
 type Ticker struct {
 	Tlatest      bson.ObjectId `json:"t_latest"`
 	Tstart       bson.ObjectId `json:"t_start"`
@@ -56,10 +57,12 @@ type Ticker struct {
 	Responsetime time.Duration `json:"responsetime"`
 }
 
+//Temp is a struct to keep the timestamp casue weird reasons this was the only fix I found
 type temp struct {
 	Timestamp bson.ObjectId
 }
 
+//WebHook stores data about the webhook
 type WebHook struct {
 	WebhookID       int
 	URL             string
@@ -139,8 +142,10 @@ func handlerAPI(w http.ResponseWriter, r *http.Request) {
 	//Set headertype, status and write the metadata
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(infoJSON)
-
+	_, err = w.Write(infoJSON)
+	if err != nil {
+		panic(err)
+	}
 }
 
 //Displays track
@@ -163,18 +168,18 @@ func handlerGetTrack(w http.ResponseWriter, r *http.Request) {
 	//Converts ID to string
 	id, err := strconv.Atoi(varID)
 	if err != nil {
-		panic(err)
+		http.Error(w, "400 Bad request", http.StatusBadRequest)
 	}
 
 	var track Track
 	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{"TrackID": id}).One(&track)
 	if err != nil {
-		panic(err)
+		http.Error(w, "400 Bad request", http.StatusBadRequest)
 	}
 
 	TrackJSON, err := json.Marshal(track)
 	if err != nil {
-		panic(err)
+		http.Error(w, "400 Bad request", http.StatusBadRequest)
 	}
 	//Check if track ID exists
 	if track.TrackID == 0 {
@@ -183,7 +188,10 @@ func handlerGetTrack(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(TrackJSON)
+	_, err = w.Write(TrackJSON)
+	if err != nil {
+		panic(err)
+	}
 }
 
 //Display a field from a track
@@ -198,19 +206,19 @@ func handlerGetField(w http.ResponseWriter, r *http.Request) {
 	//Converts ID to string
 	id, err := strconv.Atoi(varID)
 	if err != nil {
-		panic(err)
+		http.Error(w, "400 Bad request", http.StatusBadRequest)
 	}
 
 	session, err := mgo.Dial(db.HostURL)
 	if err != nil {
-		panic(err)
+		http.Error(w, "400 Bad request", http.StatusBadRequest)
 	}
 	defer session.Close()
 
 	var track Track
 	err = session.DB(db.Databasename).C(db.TrackCollectionName).Find(bson.M{"TrackID": id}).One(&track)
 	if err != nil {
-		panic(err)
+		http.Error(w, "400 Bad request", http.StatusBadRequest)
 	}
 
 	//Map to search for fields
@@ -226,7 +234,10 @@ func handlerGetField(w http.ResponseWriter, r *http.Request) {
 	//Finds the given field, error 400 if field is invalid
 	if val, ok := trackMap[field]; ok {
 		//Writes field as plain/text
-		fmt.Fprintf(w, val)
+		_, err = fmt.Fprintf(w, val)
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		http.Error(w, "400 - Bad Request, field invalid", http.StatusBadRequest)
 		return
@@ -243,7 +254,6 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	defer session.Close()
-
 	//Check if request is GET or POST
 	switch r.Method {
 	//Displays Ids
@@ -266,47 +276,64 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(IDJSON)
+		_, err = w.Write(IDJSON)
+		if err != nil {
+			panic(err)
+		}
 
 	//Creates a track
 	case ("POST"):
-		//URL string
-		var data map[string]string
-		err := json.NewDecoder(r.Body).Decode(&data)
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-		defer r.Body.Close()
-		//Parses IGC file from URL
-		track, err := igc.ParseLocation(data["url"])
-		if err != nil {
-			http.Error(w, err.Error(), 406)
-		}
-		//Fills the struct with data
-		t := Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track), data["url"], bson.NewObjectIdWithTime(time.Now())}
-		//Insert track into database
-		err = session.DB(db.Databasename).C(db.TrackCollectionName).Insert(t)
-		if err != nil {
-			fmt.Printf("Error in insert(): %v", err.Error())
-		}
 
-		infoJSON, err := json.Marshal(t.TrackID)
-		if err != nil {
-			http.Error(w, err.Error(), 400)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write(infoJSON)
-		//Adds one to ID so every track that is created is uniqe
-		ID++
-		UpdateWebHooks()
+		postFunction(w, r)
 
 	default:
 		//If request is not GET or POST error 405
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func postFunction(w http.ResponseWriter, r *http.Request) {
+	session, err := mgo.Dial(db.HostURL)
+	if err != nil {
+		panic(err)
+	}
+	//URL string
+	var data map[string]string
+	err = json.NewDecoder(r.Body).Decode(&data)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	defer r.Body.Close()
+	//Parses IGC file from URL
+	track, err := igc.ParseLocation(data["url"])
+	if err != nil {
+		http.Error(w, err.Error(), 406)
+		return
+	}
+	//Fills the struct with data
+	t := Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track), data["url"], bson.NewObjectIdWithTime(time.Now())}
+	//Insert track into database
+	err = session.DB(db.Databasename).C(db.TrackCollectionName).Insert(t)
+	if err != nil {
+		fmt.Printf("Error in insert(): %v", err.Error())
+		return
+	}
+
+	infoJSON, err := json.Marshal(t.TrackID)
+	if err != nil {
+		http.Error(w, err.Error(), 400)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(infoJSON)
+	if err != nil {
+		panic(err)
+	}
+	//Adds one to ID so every track that is created is uniqe
+	ID++
+	UpdateWebHooks()
 
 }
 
@@ -322,7 +349,10 @@ func handlerLastTicker(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 
-	fmt.Fprintf(w, track.TimeStamp.String())
+	_, err = fmt.Fprintf(w, track.TimeStamp.String())
+	if err != nil {
+		panic(err)
+	}
 
 }
 
@@ -348,18 +378,18 @@ func handlerTicker(w http.ResponseWriter, r *http.Request) {
 		pageEnd = (len(tracks) - 1) % tracksperpage
 	}
 
-	t_start := tracks[pageStart].TimeStamp
-	t_stop := tracks[pageEnd].TimeStamp
-	t_latest := tracks[ID-2].TimeStamp
+	tstart := tracks[pageStart].TimeStamp
+	tstop := tracks[pageEnd].TimeStamp
+	tlatest := tracks[ID-2].TimeStamp
 	for i := pageStart; i <= pageEnd; i++ {
 		ids = append(ids, tracks[i].TrackID)
 	}
 
 	responsetime := time.Since(start)
 
-	ticker := Ticker{t_latest,
-		t_start,
-		t_stop,
+	ticker := Ticker{tlatest,
+		tstart,
+		tstop,
 		ids,
 		responsetime}
 
@@ -370,7 +400,10 @@ func handlerTicker(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(TICKERJSON)
+	_, err = w.Write(TICKERJSON)
+	if err != nil {
+		panic(err)
+	}
 
 }
 
@@ -407,9 +440,9 @@ func handlerTickerTimestamp(w http.ResponseWriter, r *http.Request) {
 		pageEnd = (len(tracks) - 1) % tracksperpage
 	}
 
-	t_start := tracks[pageStart].TimeStamp
-	t_stop := tracks[pageEnd].TimeStamp
-	t_latest := tracks[ID-2].TimeStamp
+	tstart := tracks[pageStart].TimeStamp
+	tstop := tracks[pageEnd].TimeStamp
+	tlatest := tracks[ID-2].TimeStamp
 	for i := 0; i < tracksperpage; i++ {
 		if timestamp.Timestamp < tracks[i].TimeStamp {
 			ids = append(ids, tracks[i].TrackID)
@@ -418,9 +451,9 @@ func handlerTickerTimestamp(w http.ResponseWriter, r *http.Request) {
 
 	responsetime := time.Since(start)
 
-	ticker := Ticker{t_latest,
-		t_start,
-		t_stop,
+	ticker := Ticker{tlatest,
+		tstart,
+		tstop,
 		ids,
 		responsetime}
 
@@ -431,7 +464,10 @@ func handlerTickerTimestamp(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(TICKERJSON)
+	_, err = w.Write(TICKERJSON)
+	if err != nil {
+		panic(err)
+	}
 
 }
 
@@ -475,5 +511,8 @@ func main() {
 	router.HandleFunc("/paraglider/api/webhook/new_track/{webhook:[a-zA-Z0-9_]+}/", handlerDeleteWebHook).Methods("DELETE")
 	router.HandleFunc("/paraglider/admin/api/tracks_count/", handlerAdminCount).Methods("GET")
 	router.HandleFunc("/paraglider/admin/api/tracks/", handlerAdminDeleteTrack).Methods("DELETE")
-	http.ListenAndServe(GetPort(), router)
+	err := http.ListenAndServe(GetPort(), router)
+	if err != nil {
+		panic(err)
+	}
 }
