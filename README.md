@@ -22,6 +22,12 @@
 - ```GET /api/ ``` Uptime might not be 100% correct
 - Weak testing 27% coverage
 
+## Reasoning
+- All the webhook are stored in the same database as the tracks just in another collection to keep it simple and easy
+- Webhooks are supposed to be discord webhooks because that is the platform I'm most familliar with
+- The clock trigger is on openstack, decided to just hardcode the webhook in even though it would have been better to have it as a env file so that a user could easier change the webhook without having to open the code.
+- I went with mgo because I found more documentaion about it
+
 ### Heroku link
 https://igctrackerextended.herokuapp.com/
 
