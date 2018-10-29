@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/Bjornaahr/igc-tracker-extended.svg?branch=master)](https://travis-ci.com/Bjornaahr/igc-tracker-extended)
+
 # go-igc-tracker
 
 - ```GET /api ```API metainfo
