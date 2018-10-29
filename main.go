@@ -121,6 +121,10 @@ func Uptime() string {
 	return now.Sub(startTime).String()
 }
 
+func handlerRedirect(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/paraglider/api/", http.StatusSeeOther)
+}
+
 //Displays metadata
 func handlerAPI(w http.ResponseWriter, r *http.Request) {
 	//Gets uptime without decimal points
@@ -277,7 +281,7 @@ func handlerIGC(w http.ResponseWriter, r *http.Request) {
 		//Parses IGC file from URL
 		track, err := igc.ParseLocation(data["url"])
 		if err != nil {
-			panic(err)
+			http.Error(w, err.Error(), 406)
 		}
 		//Fills the struct with data
 		t := Track{ID, track.Date, track.Pilot, track.GliderType, track.GliderID, CalculateDistance(track), data["url"], bson.NewObjectIdWithTime(time.Now())}
@@ -458,6 +462,7 @@ func GetPort() string {
 func main() {
 	webhookmain()
 	router := mux.NewRouter()
+	router.HandleFunc("/paraglider/", handlerRedirect)
 	router.HandleFunc("/paraglider/api/", handlerAPI)
 	router.HandleFunc("/paraglider/api/igc/", handlerIGC)
 	router.HandleFunc("/paraglider/api/igc/{id:[0-9]+}/", handlerGetTrack)

@@ -175,7 +175,11 @@ func sendMessage(token string, amountadded int, start time.Time) {
 	}
 
 	message := map[string]interface{}{
-		"content": fmt.Sprintf("Latest timestamp: %s, Newest %d added are %s", trackss[len(trackss)-1].TimeStamp, amountadded, ids),
+		"content": fmt.Sprintf("Latest timestamp: %s, Newest %d added are %s [Processing time %s]",
+			trackss[len(trackss)-1].TimeStamp,
+			amountadded,
+			ids,
+			time.Since(start)),
 	}
 
 	bytesRepresentation, err := json.Marshal(message)
