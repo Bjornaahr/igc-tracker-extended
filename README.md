@@ -13,7 +13,7 @@
 - ```POST /api/webhook/new_track/``` Takes ```{"webhookURL": "<url>", "minTriggerValue" "<number>"``` and adds the webhook to the database
 - ```GET /api/webhook/new_track/<id>/``` Return the webhook with that id
 - ```DELETE /api/webhook/new_track/<id>/``` Deletes webhook with that id
-- ```GET /admin/api/tracks_count/``` Returns count of tracks in DB
+- ```GET /admin/api/tracks_count/``` Return count of tracks in DB
 - ```DELETE /admin/api/tracks/``` Deletes all tracks from DB
 
 
